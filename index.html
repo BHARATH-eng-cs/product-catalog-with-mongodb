@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Product Catalog (MongoDB / IndexedDB)</title>
+  <style>
+    /* Basic modern UI - single-file CSS */
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#94a3b8; --accent:#06b6d4; --accent-2:#7c3aed;
+      --glass: rgba(255,255,255,0.03);
+      font-family: Inter, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#071028 0%, #07121a 60%);
+      color:#e6eef6;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:28px;
+    }
+    .app{
+      width:100%;
+      max-width:1100px;
+      border-radius:12px;
+      padding:20px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      box-shadow:0 10px 30px rgba(2,6,23,0.6);
+      display:grid;
+      grid-template-columns: 380px 1fr;
+      gap:20px;
+      align-items:start;
+    }
+    h1{font-size:20px;margin:0 0 6px 0}
+    p.subtitle{color:var(--muted);margin:0 0 18px 0;font-size:13px}
+    .card{
+      background:var(--card);
+      border-radius:10px;
+      padding:14px;
+      border:1px solid rgba(255,255,255,0.03);
+    }
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input[type="text"], input[type="number"], textarea{
+      width:100%;
+      padding:8px 10px;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.04);
+      background:var(--glass);
+      color:inherit;
+      outline:none;
+      font-size:13px;
+    }
+    textarea{min-height:80px; resize:vertical}
+    .row{display:flex; gap:10px}
+    .btn{
+      display:inline-block;
+      padding:8px 12px;
+      border-radius:8px;
+      cursor:pointer;
+      border:none;
+      font-weight:600;
+      font-size:13px;
+    }
+    .btn-primary{background:linear-gradient(90deg,var(--accent),var(--accent-2)); color:#021026}
+    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04); color:var(--muted)}
+    .muted{color:var(--muted)}
+    .list{display:grid; gap:10px; margin-top:12px}
+    .product{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      padding:10px;
+      border-radius:8px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);
+      border:1px solid rgba(255,255,255,0.03);
+    }
+    .thumb{
+      width:64px;height:64px;border-radius:6px;background:#071024;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted)
+    }
+    .meta{flex:1}
+    .meta h3{margin:0;font-size:15px}
+    .meta p{margin:4px 0 0 0;color:var(--muted);font-size:13px}
+    .actions{display:flex; gap:8px}
+    .small{padding:6px 8px;font-size:12px;border-radius:6px}
+    .danger{background:#ff4d6d;color:white}
+    .info{background:#3b82f6;color:white}
+    .kbd{font-family:monospace;padding:3px 6px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);font-size:12px}
+    .topbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}
+    .notice{font-size:13px;color:var(--muted);margin-top:8px}
+    footer{margin-top:14px;font-size:12px;color:var(--muted)}
+    @media (max-width:900px){
+      .app{grid-template-columns:1fr; padding:14px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Product Catalog App">
+    <div>
+      <div class="topbar">
+        <div>
+          <h1>Product Catalog</h1>
+          <p class="subtitle">Add / edit / delete products. Switches to MongoDB if you provide a Realm App ID.</p>
+        </div>
+        <div class="kbd" id="modeBadge">Mode: IndexedDB</div>
+      </div>
+
+      <div class="card" aria-live="polite">
+        <label for="name">Product name</label>
+        <input id="name" placeholder="e.g., Wireless Mouse" />
+
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <div style="flex:1">
+            <label for="price">Price (₹)</label>
+            <input id="price" type="number" placeholder="299" />
+          </div>
+          <div style="width:120px">
+            <label for="stock">Stock</label>
+            <input id="stock" type="number" placeholder="10" />
+          </div>
+        </div>
+
+        <label for="desc" style="margin-top:10px">Description</label>
+        <textarea id="desc" placeholder="Short description"></textarea>
+
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+          <button class="btn btn-primary" id="saveBtn">Add Product</button>
+          <button class="btn btn-ghost" id="clearBtn">Clear</button>
+          <div style="margin-left:auto;text-align:right">
+            <div class="muted" style="font-size:12px">DB: <span id="dbName">IndexedDB</span></div>
+            <div class="notice">Tip: paste Realm App ID below to use MongoDB Atlas.</div>
+          </div>
+        </div>
+
+        <!-- Realm App ID input -->
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <input id="realmAppId" placeholder="Paste MongoDB Realm App ID (leave empty to use IndexedDB)" style="flex:1" />
+          <button class="btn small" id="connectBtn">Connect</button>
+        </div>
+
+        <footer>
+          <strong>Quick setup:</strong> Create a MongoDB Atlas cluster, configure a MongoDB Realm App, enable anonymous authentication (or API keys), create a "mongodb-atlas" service and a database <code>catalogdb</code> with collection <code>products</code>. Paste the Realm App ID above.
+        </footer>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <h2 style="margin:0;font-size:16px">Products</h2>
+          <div class="muted" id="countLabel">0 items</div>
+        </div>
+
+        <div class="list" id="productList" style="margin-top:10px">
+          <!-- products injected here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Realm Web SDK (IIFE bundle) -->
+  <script src="https://unpkg.com/realm-web/dist/bundle.iife.js"></script>
+  <script>
+  /*************************************************************************
+   * Product Catalog - single-file
+   * - Supports MongoDB Realm (via Realm Web SDK) if you set APP_ID at runtime
+   * - Otherwise uses IndexedDB as a local fallback for testing
+   *
+   * Instructions (quick):
+   * 1. Create MongoDB Atlas cluster + MongoDB Realm app
+   * 2. In Realm app: enable "Anonymous Authentication" (or use API keys)
+   * 3. Add a "mongodb-atlas" service that points to your cluster
+   * 4. Use database name: catalogdb and collection name: products
+   * 5. Paste the Realm App ID into the input field and click Connect
+   *
+   * Security note: Do NOT embed Atlas connection strings in client code. Realm Web with proper rules is safer.
+   *************************************************************************/
+
+  (function(){
+    // Elements
+    const nameInp = document.getElementById('name');
+    const priceInp = document.getElementById('price');
+    const stockInp = document.getElementById('stock');
+    const descInp = document.getElementById('desc');
+    const saveBtn = document.getElementById('saveBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const productList = document.getElementById('productList');
+    const countLabel = document.getElementById('countLabel');
+    const realmAppIdInp = document.getElementById('realmAppId');
+    const connectBtn = document.getElementById('connectBtn');
+    const dbNameLabel = document.getElementById('dbName');
+    const modeBadge = document.getElementById('modeBadge');
+
+    // Mode state
+    let mode = 'indexeddb'; // 'indexeddb' or 'realm'
+    let editingId = null;
+
+    // Realm variables
+    let APP_ID = ""; // intentionally empty by default
+    let realmApp = null;
+    let realmUser = null;
+    let realmCollection = null;
+
+    // ======== IndexedDB simple wrapper =========
+    const IDB_NAME = 'productCatalogDB';
+    const IDB_STORE = 'products';
+    let idbDB = null;
+
+    function openIdb(){
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = e => {
+          const db = e.target.result;
+          if(!db.objectStoreNames.contains(IDB_STORE)){
+            db.createObjectStore(IDB_STORE, { keyPath: '_id', autoIncrement: true });
+          }
+        };
+        req.onsuccess = e => { idbDB = e.target.result; resolve(idbDB); };
+        req.onerror = e => reject(e.target.error);
+      });
+    }
+
+    function idbAll(){
+      return new Promise(async (res, rej) => {
+        await openIdb();
+        const tx = idbDB.transaction(IDB_STORE,'readonly');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.getAll();
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => rej(req.error);
+      });
+    }
+    function idbAdd(doc){
+      return new Promise(async (res, rej) => {
+        await openIdb();
+        const tx = idbDB.transaction(IDB_STORE,'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.add(doc);
+        req.onsuccess = () => res({ ...doc, _id: req.result});
+        req.onerror = () => rej(req.error);
+      });
+    }
+    function idbUpdate(id, doc){
+      return new Promise(async (res, rej) => {
+        await openIdb();
+        const tx = idbDB.transaction(IDB_STORE,'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const getReq = store.get(id);
+        getReq.onsuccess = () => {
+          const existing = getReq.result || {};
+          const updated = Object.assign(existing, doc);
+          const putReq = store.put(updated);
+          putReq.onsuccess = () => res(updated);
+          putReq.onerror = () => rej(putReq.error);
+        };
+        getReq.onerror = () => rej(getReq.error);
+      });
+    }
+    function idbDelete(id){
+      return new Promise(async (res, rej) => {
+        await openIdb();
+        const tx = idbDB.transaction(IDB_STORE,'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.delete(id);
+        req.onsuccess = () => res(true);
+        req.onerror = () => rej(req.error);
+      });
+    }
+
+    // ======== Realm helpers =========
+    async function initRealm(appId){
+      if(!appId) throw new Error('No App ID');
+      APP_ID = appId.trim();
+      realmApp = new window.Realm.App({ id: APP_ID });
+      // Use anonymous login for simplicity here. In prod, use proper auth + rules.
+      const credentials = window.Realm.Credentials.anonymous();
+      realmUser = await realmApp.logIn(credentials);
+      // mongodb service name usually "mongodb-atlas" by default; adjust in your Realm settings if different
+      const mongodb = realmUser.mongoClient("mongodb-atlas");
+      realmCollection = mongodb.db("catalogdb").collection("products");
+    }
+
+    // ======== Data operations (abstracted) =========
+    async function fetchProducts(){
+      if(mode === 'realm'){
+        // query all
+        const docs = await realmCollection.find({}, { limit: 100, sort: { _id: -1 } });
+        // Realm returns BSON ObjectIds; convert if needed
+        return docs.map(d => ({ ...d, _id: d._id ? (typeof d._id === 'object' && d._id.toString) ? d._id.toString() : d._id : d._id }));
+      } else {
+        return await idbAll();
+      }
+    }
+    async function createProduct(doc){
+      if(mode === 'realm'){
+        const res = await realmCollection.insertOne(doc);
+        // insertedId available
+        return { ...doc, _id: res.insertedId.toString ? res.insertedId.toString() : res.insertedId };
+      } else {
+        return await idbAdd(doc);
+      }
+    }
+    async function editProduct(id, doc){
+      if(mode === 'realm'){
+        // If using string IDs for ObjectId, you may want to convert; here we try to use object id if needed.
+        const filter = { _id: realmIdFrom(id) };
+        await realmCollection.updateOne(filter, { $set: doc });
+        return { ...doc, _id: id };
+      } else {
+        return await idbUpdate(Number(id), doc);
+      }
+    }
+    async function removeProduct(id){
+      if(mode === 'realm'){
+        await realmCollection.deleteOne({ _id: realmIdFrom(id) });
+        return true;
+      } else {
+        return await idbDelete(Number(id));
+      }
+    }
+
+    // helper to try convert string to BSON.ObjectId if realm exposes it
+    function realmIdFrom(idStr){
+      // If realm SDK has BSON: window.Realm.BSON.ObjectId
+      try{
+        if(typeof idStr === 'object') return idStr;
+        if(window.Realm && window.Realm.BSON && window.Realm.BSON.ObjectId){
+          // If idStr looks like hex 24 chars
+          if(typeof idStr === 'string' && idStr.length === 24){
+            return new window.Realm.BSON.ObjectId(idStr);
+          }
+        }
+      }catch(e){}
+      return idStr;
+    }
+
+    // ======== UI rendering =========
+    function renderProducts(products){
+      productList.innerHTML = '';
+      products = products || [];
+      countLabel.textContent = products.length + (products.length === 1 ? ' item' : ' items');
+      products.forEach(p => {
+        const el = document.createElement('div');
+        el.className = 'product';
+        const thumb = document.createElement('div');
+        thumb.className = 'thumb';
+        thumb.textContent = p.name && p.name[0] ? p.name[0].toUpperCase() : 'P';
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const title = document.createElement('h3');
+        title.textContent = p.name || '(no name)';
+        const sub = document.createElement('p');
+        sub.innerHTML = `<strong>₹ ${p.price ?? '-'}</strong> · stock: ${p.stock ?? 0} <div class="muted" style="margin-top:6px">${(p.desc || '').slice(0,120)}</div>`;
+        meta.appendChild(title);
+        meta.appendChild(sub);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn small info';
+        editBtn.textContent = 'Edit';
+        editBtn.onclick = () => populateForEdit(p);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn small danger';
+        delBtn.textContent = 'Delete';
+        delBtn.onclick = async () => {
+          if(!confirm('Delete this product?')) return;
+          try{
+            await removeProduct(p._id);
+            toast('Deleted');
+            loadAndRender();
+          }catch(err){ alert('Delete error: '+err); console.error(err); }
+        };
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+
+        el.appendChild(thumb);
+        el.appendChild(meta);
+        el.appendChild(actions);
+        productList.appendChild(el);
+      });
+    }
+
+    function populateForEdit(p){
+      editingId = p._id;
+      nameInp.value = p.name || '';
+      priceInp.value = p.price ?? '';
+      stockInp.value = p.stock ?? '';
+      descInp.value = p.desc || '';
+      saveBtn.textContent = 'Update Product';
+      saveBtn.classList.add('btn-primary');
+      window.scrollTo({ top:0, behavior:'smooth' });
+    }
+
+    function clearForm(){
+      editingId = null;
+      nameInp.value = '';
+      priceInp.value = '';
+      stockInp.value = '';
+      descInp.value = '';
+      saveBtn.textContent = 'Add Product';
+    }
+
+    function toast(msg){
+      // minimal toast using alert role - keep simple
+      const prev = document.getElementById('app-toast');
+      if(prev) prev.remove();
+      const t = document.createElement('div');
+      t.id = 'app-toast';
+      t.textContent = msg;
+      t.style.position='fixed'; t.style.right='18px'; t.style.bottom='18px'; t.style.padding='10px 14px';
+      t.style.background='rgba(0,0,0,0.6)'; t.style.color='white'; t.style.borderRadius='8px';
+      document.body.appendChild(t);
+      setTimeout(()=>t.remove(), 2100);
+    }
+
+    // ======== Load products ========
+    async function loadAndRender(){
+      try{
+        const products = await fetchProducts();
+        renderProducts(products);
+      }catch(err){ console.error(err); alert('Load error: ' + err.message); }
+    }
+
+    // ======== Event handlers ========
+    saveBtn.addEventListener('click', async () => {
+      const name = nameInp.value.trim();
+      const price = Number(priceInp.value || 0);
+      const stock = Number(stockInp.value || 0);
+      const desc = descInp.value.trim();
+
+      if(!name){ alert('Please enter product name'); return; }
+
+      const doc = { name, price, stock, desc, updatedAt: new Date() };
+
+      try{
+        if(editingId){
+          await editProduct(editingId, doc);
+          toast('Updated');
+        } else {
+          await createProduct(doc);
+          toast('Added');
+        }
+        clearForm();
+        loadAndRender();
+      }catch(err){
+        console.error(err);
+        alert('Save error: ' + (err.message || err));
+      }
+    });
+
+    clearBtn.addEventListener('click', clearForm);
+
+    connectBtn.addEventListener('click', async () => {
+      const v = realmAppIdInp.value.trim();
+      if(!v){
+        // switch to indexeddb
+        mode = 'indexeddb';
+        dbNameLabel.textContent = 'IndexedDB';
+        modeBadge.textContent = 'Mode: IndexedDB';
+        modeBadge.style.background = 'transparent';
+        await openIdb();
+        loadAndRender();
+        toast('Using IndexedDB (local)');
+        return;
+      }
+
+      try{
+        // try init realm
+        modeBadge.textContent = 'Mode: Connecting...';
+        await initRealm(v);
+        mode = 'realm';
+        dbNameLabel.textContent = 'MongoDB (Realm)';
+        modeBadge.textContent = 'Mode: MongoDB Realm';
+        modeBadge.style.background = 'linear-gradient(90deg,var(--accent),var(--accent-2))';
+        toast('Connected to Realm');
+        loadAndRender();
+      }catch(err){
+        console.error(err);
+        alert('Realm connect error: ' + (err && err.message ? err.message : err));
+        mode = 'indexeddb';
+        dbNameLabel.textContent = 'IndexedDB';
+        modeBadge.textContent = 'Mode: IndexedDB';
+        await openIdb();
+        loadAndRender();
+      }
+    });
+
+    // initial boot: IndexedDB
+    (async function boot(){
+      await openIdb();
+      loadAndRender();
+    })();
+
+    // Expose some debugging helpers (optional)
+    window.__catalog = {
+      switchToIndexedDB: async () => { mode='indexeddb'; await openIdb(); dbNameLabel.textContent='IndexedDB'; modeBadge.textContent='Mode: IndexedDB'; loadAndRender(); },
+      switchToRealm: async (appId) => { realmAppIdInp.value = appId; connectBtn.click(); },
+      clearIndexedDB: async () => {
+        await openIdb();
+        const tx = idbDB.transaction(IDB_STORE,'readwrite');
+        tx.objectStore(IDB_STORE).clear();
+        loadAndRender();
+      }
+    };
+  })();
+  </script>
+</body>
+</html>
